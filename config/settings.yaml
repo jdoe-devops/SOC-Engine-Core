@@ -1,0 +1,137 @@
+# SOC Engine Core — Configuration
+# CyberAlam Solutions Sdn Bhd
+# Last updated: 2026-03-18
+
+# ============================================================
+# General Settings
+# ============================================================
+engine:
+  name: "SOC Engine Core"
+  version: "1.4.2"
+  environment: "production"
+  workers: 4
+  log_level: "INFO"
+  log_file: "/var/log/cyberalam/soc-engine.log"
+
+# ============================================================
+# Ingestion Configuration
+# ============================================================
+ingestion:
+  poll_interval: 30  # seconds
+  batch_size: 500
+  max_queue_size: 10000
+  retry_on_failure: true
+  retry_delay: 10
+
+# ============================================================
+# Data Sources
+# ============================================================
+data_sources:
+  - type: "syslog"
+    endpoint: "udp://0.0.0.0:514"
+    enabled: true
+    tags: ["network", "firewall"]
+
+  - type: "syslog"
+    endpoint: "tcp://0.0.0.0:1514"
+    enabled: true
+    tags: ["endpoint", "server"]
+
+  - type: "windows_event_log"
+    endpoint: "winrm://dc01.cyberalam.local:5985"
+    credentials:
+      username: "${WINRM_USERNAME}"
+      password: "${WINRM_PASSWORD}"
+    enabled: true
+    tags: ["active_directory", "windows"]
+
+  - type: "cloud_audit"
+    endpoint: "https://logs.amazonaws.com"
+    credentials:
+      access_key: "${AWS_ACCESS_KEY_ID}"
+      secret_key: "${AWS_SECRET_ACCESS_KEY}"
+      region: "ap-southeast-1"
+    enabled: false
+    tags: ["cloud", "aws"]
+
+# ============================================================
+# Correlation Engine
+# ============================================================
+correlation:
+  window: 300  # 5-minute correlation window
+  min_events_for_incident: 3
+  dedup_enabled: true
+  dedup_window: 60
+
+# ============================================================
+# Alert & Triage Configuration
+# ============================================================
+alerts:
+  severity_threshold: "medium"  # minimum severity to generate alert
+  max_alerts_per_minute: 50
+  auto_resolve_timeout: 3600  # 1 hour
+
+triage_rules:
+  - name: "critical_apt_indicator"
+    condition:
+      severity: "critical"
+      threat_intel_match: true
+    action: "block"
+    notify: true
+
+  - name: "brute_force_detection"
+    condition:
+      severity: "high"
+      event_count_gte: 20
+      category: "authentication"
+    action: "isolate"
+    notify: true
+
+  - name: "suspicious_outbound"
+    condition:
+      severity: "medium"
+      category: "network"
+      threat_intel_match: true
+    action: "escalate"
+
+# ============================================================
+# Threat Intelligence Feeds
+# ============================================================
+threat_intel:
+  cache_ttl: 3600
+  api_keys:
+    abuseipdb: "${ABUSEIPDB_API_KEY}"
+    virustotal: "${VIRUSTOTAL_API_KEY}"
+    otx: "${OTX_API_KEY}"
+
+# ============================================================
+# Webhook Notifications
+# ============================================================
+webhooks:
+  slack:
+    enabled: true
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+    channel: "#soc-alerts"
+    mention_on_critical: "@channel"
+
+  teams:
+    enabled: false
+    webhook_url: "${TEAMS_WEBHOOK_URL}"
+
+  pagerduty:
+    enabled: true
+    integration_key: "${PAGERDUTY_KEY}"
+    escalation_policy: "SOC-L1"
+
+# ============================================================
+# Database — Alert Storage
+# ============================================================
+database:
+  type: "postgresql"
+  host: "db01.cyberalam.local"
+  port: 5432
+  name: "soc_engine"
+  username: "${DB_USERNAME}"
+  password: "${DB_PASSWORD}"
+  pool_size: 10
+  ssl_mode: "require"
