@@ -1,0 +1,13 @@
+# SOC Engine Core — Dependencies
+# CyberAlam Solutions
+
+pyyaml>=6.0.1
+requests>=2.31.0
+urllib3>=2.1.0
+python-dateutil>=2.8.2
+psycopg2-binary>=2.9.9
+cryptography>=41.0.7
+jinja2>=3.1.2
+schedule>=1.2.1
+prometheus-client>=0.19.0
+structlog>=23.2.0
