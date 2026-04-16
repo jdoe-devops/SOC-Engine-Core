@@ -1,0 +1,294 @@
+<?xml version="1.0"?>
+<pfsense>
+  <version>24.03</version>
+  <lastchange/>
+  <system>
+    <optimization>normal</optimization>
+    <hostname>pfsense-lab</hostname>
+    <domain>cyberalam.local</domain>
+    <timeservers>pool.ntp.org</timeservers>
+    <timezone>Asia/Kuala_Lumpur</timezone>
+    <language>en_US</language>
+    <dnsserver>8.8.8.8</dnsserver>
+    <dnsserver>1.1.1.1</dnsserver>
+    <group>
+      <name>admins</name>
+      <description>System Administrators</description>
+      <scope>system</scope>
+      <gid>1999</gid>
+      <member>0</member>
+      <priv>page-all</priv>
+    </group>
+    <user>
+      <name>admin</name>
+      <descr>System Administrator</descr>
+      <scope>system</scope>
+      <groupname>admins</groupname>
+      <uid>0</uid>
+      <priv>user-shell-access</priv>
+    </user>
+  </system>
+
+  <!-- ============================================ -->
+  <!-- Interface Configuration                       -->
+  <!-- ============================================ -->
+  <interfaces>
+    <wan>
+      <if>em0</if>
+      <descr>WAN — ISP Uplink (TM Unifi Business)</descr>
+      <enable/>
+      <ipaddr>dhcp</ipaddr>
+      <spoofmac/>
+      <blockbogons>on</blockbogons>
+    </wan>
+    <lan>
+      <if>em1</if>
+      <descr>LAN — Office Network</descr>
+      <enable/>
+      <ipaddr>10.200.0.1</ipaddr>
+      <subnet>24</subnet>
+    </lan>
+    <opt1>
+      <if>em2</if>
+      <descr>SOC_ENGINE_VLAN — SOC Engine Testing</descr>
+      <enable/>
+      <ipaddr>10.200.1.1</ipaddr>
+      <subnet>24</subnet>
+    </opt1>
+    <opt2>
+      <if>em3</if>
+      <descr>FORENSICS_VLAN — IRENE Analysis Sandbox</descr>
+      <enable/>
+      <ipaddr>10.200.2.1</ipaddr>
+      <subnet>24</subnet>
+    </opt2>
+  </interfaces>
+
+  <!-- ============================================ -->
+  <!-- DHCP Server Configuration                     -->
+  <!-- ============================================ -->
+  <dhcpd>
+    <lan>
+      <enable/>
+      <range>
+        <from>10.200.0.50</from>
+        <to>10.200.0.200</to>
+      </range>
+      <defaultleasetime>86400</defaultleasetime>
+      <maxleasetime>172800</maxleasetime>
+      <gateway>10.200.0.1</gateway>
+      <dnsserver>10.200.0.1</dnsserver>
+      <domain>cyberalam.local</domain>
+    </lan>
+    <opt1>
+      <enable/>
+      <range>
+        <from>10.200.1.50</from>
+        <to>10.200.1.200</to>
+      </range>
+      <gateway>10.200.1.1</gateway>
+      <dnsserver>10.200.1.1</dnsserver>
+    </opt1>
+  </dhcpd>
+
+  <!-- ============================================ -->
+  <!-- NAT Rules                                     -->
+  <!-- ============================================ -->
+  <nat>
+    <outbound>
+      <mode>automatic</mode>
+    </outbound>
+  </nat>
+
+  <!-- ============================================ -->
+  <!-- Firewall Rules                                -->
+  <!-- ============================================ -->
+  <filter>
+    <!-- WAN Rules -->
+    <rule>
+      <id>fw-wan-001</id>
+      <type>block</type>
+      <interface>wan</interface>
+      <ipprotocol>inet</ipprotocol>
+      <source><any/></source>
+      <destination><any/></destination>
+      <descr>Default deny all inbound on WAN</descr>
+      <log/>
+    </rule>
+
+    <!-- LAN Rules -->
+    <rule>
+      <id>fw-lan-001</id>
+      <type>pass</type>
+      <interface>lan</interface>
+      <ipprotocol>inet</ipprotocol>
+      <protocol>tcp/udp</protocol>
+      <source>
+        <network>lan</network>
+      </source>
+      <destination><any/></destination>
+      <descr>Allow LAN to any — general office traffic</descr>
+    </rule>
+
+    <!-- SOC Engine VLAN Rules -->
+    <rule>
+      <id>fw-soc-001</id>
+      <type>pass</type>
+      <interface>opt1</interface>
+      <ipprotocol>inet</ipprotocol>
+      <protocol>tcp</protocol>
+      <source>
+        <network>opt1</network>
+      </source>
+      <destination>
+        <network>lan</network>
+      </destination>
+      <destination_port>514,1514,9200</destination_port>
+      <descr>Allow SOC Engine to receive syslog and query Elasticsearch on LAN</descr>
+    </rule>
+
+    <rule>
+      <id>fw-soc-002</id>
+      <type>pass</type>
+      <interface>opt1</interface>
+      <ipprotocol>inet</ipprotocol>
+      <protocol>tcp</protocol>
+      <source>
+        <network>opt1</network>
+      </source>
+      <destination>
+        <network>opt2</network>
+      </destination>
+      <destination_port>8443</destination_port>
+      <descr>Allow SOC Engine to submit samples to IRENE sandbox on FORENSICS_VLAN</descr>
+    </rule>
+
+    <!-- FORENSICS VLAN Rules -->
+    <rule>
+      <id>fw-forensics-001</id>
+      <type>block</type>
+      <interface>opt2</interface>
+      <ipprotocol>inet</ipprotocol>
+      <source>
+        <network>opt2</network>
+      </source>
+      <destination>
+        <network>wan</network>
+      </destination>
+      <descr>Block IRENE sandbox from reaching the internet — isolation requirement</descr>
+      <log/>
+    </rule>
+
+    <rule>
+      <id>fw-forensics-002</id>
+      <type>pass</type>
+      <interface>opt2</interface>
+      <ipprotocol>inet</ipprotocol>
+      <protocol>tcp</protocol>
+      <source>
+        <network>opt2</network>
+      </source>
+      <destination>
+        <address>10.200.1.10</address>
+      </destination>
+      <destination_port>5432</destination_port>
+      <descr>Allow IRENE to write analysis results back to SOC Engine database</descr>
+    </rule>
+
+    <rule>
+      <id>fw-forensics-003</id>
+      <type>pass</type>
+      <interface>opt2</interface>
+      <ipprotocol>inet</ipprotocol>
+      <protocol>tcp</protocol>
+      <source>
+        <address>10.200.2.50</address>
+      </source>
+      <destination>
+        <address>10.200.2.100</address>
+      </destination>
+      <destination_port>4443</destination_port>
+      <descr>IRENE internal API</descr>
+    </rule>
+
+    <!-- Anti-lockout Rule -->
+    <rule>
+      <id>fw-mgmt-001</id>
+      <type>pass</type>
+      <interface>lan</interface>
+      <ipprotocol>inet</ipprotocol>
+      <protocol>tcp</protocol>
+      <source>
+        <network>lan</network>
+      </source>
+      <destination>
+        <address>10.200.0.1</address>
+      </destination>
+      <destination_port>443,22</destination_port>
+      <descr>Anti-lockout — allow LAN to pfSense management</descr>
+    </rule>
+  </filter>
+
+  <!-- ============================================ -->
+  <!-- Aliases                                       -->
+  <!-- ============================================ -->
+  <aliases>
+    <alias>
+      <name>SOC_Engine_Hosts</name>
+      <type>host</type>
+      <address>10.200.1.10 10.200.1.11 10.200.1.12</address>
+      <descr>SOC Engine cluster nodes in testing VLAN</descr>
+      <detail>Primary||Secondary||Backup</detail>
+    </alias>
+    <alias>
+      <name>IRENE_Sandbox</name>
+      <type>host</type>
+      <address>10.200.2.50 10.200.2.51</address>
+      <descr>IRENE analysis sandbox nodes — isolated forensics VLAN</descr>
+      <detail>Analyzer-1||Analyzer-2</detail>
+    </alias>
+    <alias>
+      <name>ThreatIntel_Feeds</name>
+      <type>host</type>
+      <address>otx.alienvault.com api.abuseipdb.com www.virustotal.com</address>
+      <descr>Whitelisted threat intelligence API endpoints</descr>
+      <detail>AlienVault OTX||AbuseIPDB||VirusTotal</detail>
+    </alias>
+  </aliases>
+
+  <!-- ============================================ -->
+  <!-- DNS Resolver                                  -->
+  <!-- ============================================ -->
+  <unbound>
+    <enable>on</enable>
+    <dnssec>on</dnssec>
+    <active_interface>lan,opt1</active_interface>
+    <outgoing_interface>wan</outgoing_interface>
+    <hosts>
+      <host>soc-engine-01</host>
+      <domain>cyberalam.local</domain>
+      <ip>10.200.1.10</ip>
+      <descr>Primary SOC Engine node</descr>
+    </hosts>
+    <hosts>
+      <host>irene-sandbox-01</host>
+      <domain>cyberalam.local</domain>
+      <ip>10.200.2.50</ip>
+      <descr>Primary IRENE analysis sandbox</descr>
+    </hosts>
+  </unbound>
+
+  <!-- ============================================ -->
+  <!-- Syslog Configuration                          -->
+  <!-- ============================================ -->
+  <syslog>
+    <nologdefaultblock/>
+    <filterdescriptions>1</filterdescriptions>
+    <remoteserver>10.200.1.10</remoteserver>
+    <remoteserver2/>
+    <remoteserver3/>
+    <sourceip>lan</sourceip>
+    <ipproto>ipv4</ipproto>
+  </syslog>
+
+</pfsense>
